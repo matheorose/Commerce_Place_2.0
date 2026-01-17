@@ -48,7 +48,7 @@ def chat(request: ChatRequest) -> ChatResponse:
         return ChatResponse(success=False, message=str(exc))
 
     if not outcome.fetch:
-        return ChatResponse(success=False, message="L'agent n'a pas trouvé de commerces exploitables.")
+        return ChatResponse(success=True, answer=outcome.answer)
 
     fetch = outcome.fetch
     analysis = outcome.analysis

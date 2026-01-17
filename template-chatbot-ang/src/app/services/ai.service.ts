@@ -39,13 +39,25 @@ export class AiService {
       this.http.post<BackendResponse>(`${environment.apiBaseUrl}/api/chat`, body),
     );
 
-    if (!response.success || !response.data) {
+    if (!response.success) {
       return [
         {
           kind: 'text',
           text:
             response.message ??
             'Impossible de traiter la demande. Vérifiez le backend.',
+        },
+      ];
+    }
+
+    if (!response.data) {
+      return [
+        {
+          kind: 'text',
+          text:
+            response.answer ??
+            response.message ??
+            'Requête traitée sans données spécifiques.',
         },
       ];
     }
