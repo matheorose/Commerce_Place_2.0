@@ -75,6 +75,15 @@ class PipelineService:
             zones=zones,
         )
 
+    def build_points_map(self, agent_payload: AgentPayload) -> Path:
+        """Generate a lightweight map with only commerce markers."""
+        map_filename = f"map_points_{agent_payload.city}_{agent_payload.category_key}.html"
+        return self.map_builder.build_points_map(
+            agent_payload.bbox,
+            agent_payload.places,
+            self.config.views_dir / map_filename,
+        )
+
     # Helpers --------------------------------------------------------------
     def _result_path(self, filename: str) -> Path:
         name = filename if filename.lower().endswith(".json") else f"{filename}.json"

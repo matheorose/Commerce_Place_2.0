@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections import deque
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Deque, List, Literal, Optional
 
 from langchain_core.prompts import ChatPromptTemplate
@@ -36,6 +37,7 @@ class AgentOutcome:
     answer: str
     fetch: Optional[AgentPayload]
     analysis: Optional[PipelineArtifacts]
+    map_file: Optional[Path]
 
 
 PLANNER_PROMPT = ChatPromptTemplate.from_messages(
@@ -77,6 +79,8 @@ Tu disposes des données suivantes obtenues automatiquement :
 Historique des 5 derniers échanges (du plus ancien au plus récent) :
 {history}
 
+Suis attentivement les instructions fournies pour chaque réponse.
+
 Rédige une réponse en français en expliquant clairement :
 1. Les résultats de recherche (nombre de commerces, infos clés).
 2. Si l'analyse est disponible, décris les zones recommandées sans employer le mot "cluster" (parle de « Zone 1 », etc.) et prends en compte la densité d'habitants et la concurrence déjà présente.
@@ -85,6 +89,7 @@ Rédige une réponse en français en expliquant clairement :
 """.strip(),
         ),
         ("human", "{message}"),
+        ("human", "Instructions additionnelles : {instructions}"),
         (
             "human",
             "Contexte structuré :\n{context}\nCompose ta réponse :",
@@ -110,10 +115,12 @@ class CityInsightsAgent:
     def run(self, message: str) -> AgentOutcome:
         fetch_result: AgentPayload | None = None
         analysis_result: PipelineArtifacts | None = None
+        map_path: Path | None = None
 
         history_text = self._format_history()
         plan = self.planner.invoke({"message": message, "history": history_text})
         actions = plan.actions or [ToolAction(tool="fetch_commerces", reason="Par défaut")]  # type: ignore[arg-type]
+
         needs_fetch = any(a.tool in {"fetch_commerces", "analyze_city"} for a in actions)
         wants_analysis = any(a.tool == "analyze_city" for a in actions)
 
@@ -124,26 +131,44 @@ class CityInsightsAgent:
                 if not fetch_result:
                     fetch_result = self.adapter.run_from_message(message)
                 analysis_result = self.pipeline.run_from_agent(fetch_result)
+                map_path = analysis_result.map_file
             elif action.tool == "respond_direct":
                 continue
 
         if needs_fetch and fetch_result is None:
             raise RuntimeError("Impossible d'obtenir les commerces depuis la requête utilisateur.")
-        if wants_analysis and analysis_result is None and fetch_result is not None:
-            analysis_result = self.pipeline.run_from_agent(fetch_result)
 
-        context = self._build_context(fetch_result, analysis_result)
-        response = self.responder.invoke({"message": message, "context": context, "history": history_text})
+        if fetch_result and fetch_result.places and not wants_analysis:
+            map_path = self.pipeline.build_points_map(fetch_result)
+
+        context = self._build_context(
+            fetch_result,
+            analysis_result,
+            map_file=map_path,
+            include_analysis_details=wants_analysis,
+        )
+        instructions = self._build_instructions(message, wants_analysis)
+        response = self.responder.invoke(
+            {
+                "message": message,
+                "context": context,
+                "history": history_text,
+                "instructions": instructions,
+            }
+        )
         answer = getattr(response, "content", "Réponse générée.")
         self._remember(message, answer)
 
-        return AgentOutcome(answer=answer, fetch=fetch_result, analysis=analysis_result)
+        return AgentOutcome(answer=answer, fetch=fetch_result, analysis=analysis_result, map_file=map_path)
 
     # ------------------------------------------------------------------
     def _build_context(
         self,
         fetch: AgentPayload | None,
         analysis: PipelineArtifacts | None,
+        *,
+        map_file: Path | None,
+        include_analysis_details: bool,
     ) -> str:
         parts: List[str] = []
         if fetch:
@@ -157,19 +182,24 @@ class CityInsightsAgent:
                 "Aucune donnée structurée extraite. Réponds librement en t'appuyant sur tes connaissances générales."
             )
         if analysis and fetch:
-            zone_lines = [
-                (
-                    f"Zone {z.zone_id}: population≈{int(z.population)} habitants, "
-                    f"commerces existants={z.existing_commerces}, "
-                    f"centre lat={z.lat:.4f}, lon={z.lon:.4f}"
+            if include_analysis_details:
+                zone_lines = [
+                    (
+                        f"Zone {z.zone_id}: population≈{int(z.population)} habitants, "
+                        f"commerces existants={z.existing_commerces}, "
+                        f"centre lat={z.lat:.4f}, lon={z.lon:.4f}"
+                    )
+                    for z in analysis.zones[:5]
+                ]
+                parts.append(
+                    "Carte: " + str(analysis.map_file)
+                    + "\nHabitants: " + str(analysis.inhabitants_file)
+                    + "\nZones recommandées:\n" + "\n".join(zone_lines)
                 )
-                for z in analysis.zones[:5]
-            ]
-            parts.append(
-                "Carte: " + str(analysis.map_file)
-                + "\nHabitants: " + str(analysis.inhabitants_file)
-                + "\nZones recommandées:\n" + "\n".join(zone_lines)
-            )
+            else:
+                parts.append("Carte générée: " + str(analysis.map_file))
+        elif map_file:
+            parts.append("Carte simple: " + str(map_file))
         return "\n\n".join(parts)
 
     def _format_history(self) -> str:
@@ -183,5 +213,16 @@ class CityInsightsAgent:
     def _remember(self, user_message: str, agent_answer: str) -> None:
         self.memory.append((user_message, agent_answer))
 
+    def _build_instructions(self, message: str, wants_analysis: bool) -> str:
+        if wants_analysis:
+            return (
+                "L'utilisateur a demandé des recommandations d'implantation ou une analyse détaillée. "
+                "Tu dois décrire les zones et conseiller l'utilisateur."
+            )
+        return (
+            "L'utilisateur souhaite uniquement obtenir les commerces existants (par exemple le nombre). "
+            "Réponds en te concentrant sur le comptage et la description des commerces, "
+            "sans ajouter d'analyse stratégique ou de recommandation de zone."
+        )
 
 __all__ = ["CityInsightsAgent", "AgentOutcome"]

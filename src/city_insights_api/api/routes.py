@@ -52,6 +52,7 @@ def chat(request: ChatRequest) -> ChatResponse:
 
     fetch = outcome.fetch
     analysis = outcome.analysis
+    map_path = outcome.map_file
 
     parsed = ParsedInfo(
         city=fetch.city,
@@ -66,9 +67,9 @@ def chat(request: ChatRequest) -> ChatResponse:
         places=fetch.places,
         result_file=str(fetch.result_file),
         result_filename=fetch.result_filename,
-        view_file=analysis.map_file.name if analysis else None,
+        view_file=map_path.name if map_path else None,
         inhabitants_file=str(analysis.inhabitants_file) if analysis else None,
-        map_file=str(analysis.map_file) if analysis else None,
+        map_file=str(map_path) if map_path else None,
         kmeans=analysis.kmeans if analysis else None,
         zones=analysis.zones if analysis else None,
     )

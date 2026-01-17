@@ -10,7 +10,7 @@ import branca.colormap as cm
 import folium
 from folium.plugins import HeatMap
 
-from ..models.domain import BoundingBox, ZoneInsight
+from ..models.domain import AgentPlace, BoundingBox, ZoneInsight
 from .carroyage import CarroyagePayload
 
 
@@ -42,6 +42,27 @@ class MapBuilder:
         if zones:
             self._add_zones(fmap, zones)
         self._add_commerce_layer(fmap, commerce_items)
+
+        output_html.parent.mkdir(parents=True, exist_ok=True)
+        fmap.save(output_html)
+        return output_html
+
+    def build_points_map(
+        self,
+        bbox: BoundingBox,
+        places: Sequence[AgentPlace],
+        output_html: Path,
+    ) -> Path:
+        center_lat = (bbox.south + bbox.north) / 2.0
+        center_lon = (bbox.west + bbox.east) / 2.0
+        fmap = folium.Map(location=[center_lat, center_lon], zoom_start=13)
+
+        items = [
+            {"lat": place.lat, "lon": place.lon, "name": place.name}
+            for place in places
+            if place.lat is not None and place.lon is not None
+        ]
+        self._add_commerce_layer(fmap, items)
 
         output_html.parent.mkdir(parents=True, exist_ok=True)
         fmap.save(output_html)
