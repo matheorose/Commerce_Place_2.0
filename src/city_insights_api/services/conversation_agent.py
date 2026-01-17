@@ -111,25 +111,36 @@ class CityInsightsAgent:
         self.planner = PLANNER_PROMPT | self.llm.with_structured_output(ToolPlan)
         self.responder = RESPONSE_PROMPT | self.llm
         self.memory: Deque[tuple[str, str]] = deque(maxlen=5)
+        self.user_history: Deque[str] = deque(maxlen=5)
 
     def run(self, message: str) -> AgentOutcome:
         fetch_result: AgentPayload | None = None
         analysis_result: PipelineArtifacts | None = None
         map_path: Path | None = None
 
+        self._remember_user(message)
         history_text = self._format_history()
         plan = self.planner.invoke({"message": message, "history": history_text})
         actions = plan.actions or [ToolAction(tool="fetch_commerces", reason="Par défaut")]  # type: ignore[arg-type]
+        adapter_message = self._build_adapter_message(message)
+        analysis_required = self._requires_analysis(adapter_message)
+        if analysis_required and not any(a.tool == "analyze_city" for a in actions):
+            if not any(a.tool == "fetch_commerces" for a in actions):
+                actions.insert(
+                    0,
+                    ToolAction(tool="fetch_commerces", reason="Analyse requise pour recommander un emplacement."),
+                )
+            actions.append(ToolAction(tool="analyze_city", reason="Analyse requise pour recommander un emplacement."))
 
         needs_fetch = any(a.tool in {"fetch_commerces", "analyze_city"} for a in actions)
-        wants_analysis = any(a.tool == "analyze_city" for a in actions)
+        wants_analysis = analysis_required or any(a.tool == "analyze_city" for a in actions)
 
         for action in actions:
             if action.tool == "fetch_commerces" and fetch_result is None:
-                fetch_result = self.adapter.run_from_message(message)
+                fetch_result = self.adapter.run_from_message(adapter_message)
             elif action.tool == "analyze_city":
                 if not fetch_result:
-                    fetch_result = self.adapter.run_from_message(message)
+                    fetch_result = self.adapter.run_from_message(adapter_message)
                 analysis_result = self.pipeline.run_from_agent(fetch_result)
                 map_path = analysis_result.map_file
             elif action.tool == "respond_direct":
@@ -213,6 +224,9 @@ class CityInsightsAgent:
     def _remember(self, user_message: str, agent_answer: str) -> None:
         self.memory.append((user_message, agent_answer))
 
+    def _remember_user(self, user_message: str) -> None:
+        self.user_history.append(user_message)
+
     def _build_instructions(self, message: str, wants_analysis: bool) -> str:
         if wants_analysis:
             return (
@@ -224,5 +238,25 @@ class CityInsightsAgent:
             "Réponds en te concentrant sur le comptage et la description des commerces, "
             "sans ajouter d'analyse stratégique ou de recommandation de zone."
         )
+
+    def _build_adapter_message(self, message: str) -> str:
+        """Enrichit le message envoyé à l'agent legacy avec le dernier contexte utilisateur pertinent."""
+        # On exclut le message courant (déjà stocké en dernière position).
+        historical = list(self.user_history)[:-1]
+        recent_users = [user for user in historical if user.strip()]
+        if not recent_users:
+            return message
+        tail = recent_users[-2:]
+        tail = [text for text in tail if text.strip()]
+        if not tail:
+            return message
+        history = " ".join(part.strip().rstrip("?") for part in tail)
+        combined = f"{history} {message}".strip()
+        return combined
+
+    def _requires_analysis(self, message: str) -> bool:
+        normalized = message.lower()
+        keywords = ("placer", "implanter", "installer", "où puis-je", "ou puis-je", "emplacement")
+        return any(keyword in normalized for keyword in keywords)
 
 __all__ = ["CityInsightsAgent", "AgentOutcome"]
