@@ -1,0 +1,87 @@
+<div class="flex flex-row justify-center pb-20 h-dvh bg-white dark:bg-zinc-900">
+  <div class="flex flex-col justify-between gap-4">
+    <div
+      #messagesContainer
+      class="flex flex-col gap-3 h-full w-dvw items-center overflow-y-scroll"
+    >
+      <div
+        *ngIf="messages.length === 0"
+        class="h-[350px] px-4 w-full md:w-[500px] md:px-0 pt-20"
+      >
+        <div
+          class="border rounded-lg p-6 flex flex-col gap-4 text-zinc-500 text-sm dark:text-zinc-400 dark:border-zinc-700"
+        >
+          <p
+            class="flex flex-row justify-center gap-4 items-center text-zinc-900 dark:text-zinc-50"
+          >
+            <app-vercel-icon [size]="16"></app-vercel-icon>
+            <span>+</span>
+            <app-masonry-icon></app-masonry-icon>
+          </p>
+          <p>
+            Discutez avec l’agent pour trouver des commerces (boulangeries,
+            pharmacies, etc.) dans la ville de votre choix et récupérez les
+            cartes générées automatiquement.
+          </p>
+          <p>
+            Exemple&nbsp;: « Trouve les boulangeries à Thann dans un rayon de
+            2km ».
+          </p>
+        </div>
+      </div>
+
+      <ng-container *ngFor="let message of messages; trackBy: trackMessage">
+        <app-message
+          [role]="message.role"
+          [text]="message.text"
+          [places]="message.places"
+          [viewUrl]="message.viewUrl"
+        ></app-message>
+      </ng-container>
+
+      <div
+        *ngIf="isProcessing"
+        class="reflection-message flex flex-row gap-4 px-4 w-full md:w-[500px] md:px-0"
+      >
+        <div
+          class="size-[24px] flex flex-col justify-center items-center flex-shrink-0 text-blue-500"
+        >
+          <app-bot-icon></app-bot-icon>
+        </div>
+        <div class="text-blue-500 tracking-wide">{{ reflectionText }}</div>
+      </div>
+
+      <div #messagesEnd></div>
+    </div>
+
+    <div class="grid sm:grid-cols-2 gap-2 w-full px-4 md:px-0 mx-auto md:max-w-[500px] mb-4">
+      <ng-container *ngIf="messages.length === 0">
+        <div
+          *ngFor="let action of suggestedActions; let index = index"
+          [class.hidden]="index > 1"
+          class="block sm:block"
+        >
+          <button
+            (click)="runAction(action.action)"
+            class="w-full text-left border border-zinc-200 dark:border-zinc-800 text-zinc-800 dark:text-zinc-300 rounded-lg p-2 text-sm hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors flex flex-col"
+          >
+            <span class="font-medium">{{ action.title }}</span>
+            <span class="text-zinc-500 dark:text-zinc-400">
+              {{ action.label }}
+            </span>
+          </button>
+        </div>
+      </ng-container>
+    </div>
+
+    <form class="flex flex-col gap-2 relative items-center" (ngSubmit)="onSubmit()">
+      <input
+        name="message"
+        class="bg-zinc-100 rounded-md px-2 py-1.5 w-full outline-none dark:bg-zinc-700 text-zinc-800 dark:text-zinc-300 md:max-w-[500px] max-w-[calc(100dvw-32px)]"
+        placeholder="Send a message..."
+        [(ngModel)]="inputValue"
+        [disabled]="isProcessing"
+      />
+    </form>
+  </div>
+</div>

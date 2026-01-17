@@ -1,0 +1,7 @@
+:host {
+  display: block;
+}
+
+.dark .bg-white {
+  color: #0a0a0a;
+}

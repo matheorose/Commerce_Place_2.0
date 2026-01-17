@@ -1,0 +1,33 @@
+<div class="md:max-w-[452px] max-w-[calc(100dvw-80px)] w-full pb-6">
+  <div class="flex flex-col gap-2">
+    <div class="flex flex-row gap-2">
+      <div
+        class="h-[232px] w-72 dark:bg-zinc-800 bg-zinc-100 rounded-lg p-2 flex flex-col justify-end"
+        [ngStyle]="backgrounds.yard"
+      >
+        <div class="text-xs px-1 py-0.5 bg-white text-zinc-900 w-fit rounded-md">
+          Front Yard
+        </div>
+      </div>
+
+      <div class="flex flex-col gap-2">
+        <div
+          class="h-28 w-52 dark:bg-zinc-800 bg-zinc-100 rounded-lg flex flex-col justify-end p-2"
+          [ngStyle]="backgrounds.patio"
+        >
+          <div class="text-xs px-1 py-0.5 bg-white text-zinc-900 w-fit rounded-md">
+            Patio
+          </div>
+        </div>
+        <div
+          class="h-28 w-52 dark:bg-zinc-800 bg-zinc-100 rounded-lg flex flex-col justify-end p-2"
+          [ngStyle]="backgrounds.side"
+        >
+          <div class="text-xs px-1 py-0.5 bg-white text-zinc-900 w-fit rounded-md">
+            Side
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

@@ -1,0 +1,33 @@
+[project]
+name = "city-insights-api"
+version = "0.1.0"
+description = "Clean FastAPI service orchestrating the commerce agent and analysis pipeline"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi>=0.111.0",
+    "uvicorn>=0.30.0",
+    "python-dotenv>=1.0.0",
+    "pydantic>=2.6.0",
+    "pandas>=2.1.0",
+    "pyproj>=3.6.0",
+    "folium>=0.15.0",
+    "branca>=0.7.0",
+    "numpy>=1.26.0",
+    "matplotlib>=3.8.0",
+    "scikit-learn>=1.4.0",
+    "langchain>=1.2.0",
+    "langchain-openai>=1.1.3",
+    "langgraph>=1.0.5",
+    "requests>=2.32.0",
+]
+
+[build-system]
+requires = ["setuptools>=68.0.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-dir]
+"" = "src"

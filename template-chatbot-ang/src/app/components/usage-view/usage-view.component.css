@@ -1,0 +1,7 @@
+:host {
+  display: block;
+}
+
+.w-2 {
+  transition: height 0.4s ease;
+}

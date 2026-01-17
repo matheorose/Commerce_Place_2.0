@@ -1,0 +1,14 @@
+:host {
+  display: block;
+  min-height: 100vh;
+}
+
+form input:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.reflection-message {
+  font-weight: 600;
+  font-size: 0.95rem;
+}

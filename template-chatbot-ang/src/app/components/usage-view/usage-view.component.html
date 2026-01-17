@@ -1,0 +1,53 @@
+<div
+  class="md:max-w-[452px] max-w-[calc(100dvw-80px)] w-full pb-6 flex flex-col gap-4"
+>
+  <div class="flex flex-col text-zinc-800 dark:text-zinc-200">
+    <div class="text-zinc-500 text-sm">Average Usage</div>
+    <div class="font-semibold">
+      {{ average | number: '1.0-0' }} {{ unitLabel }}
+    </div>
+  </div>
+
+  <div class="flex flex-row gap-6 justify-between">
+    <div class="mt-auto flex flex-col justify-between h-full py-2">
+      <div class="text-xs text-zinc-300 mb-3" *ngFor="let label of [100, 75, 50, 25, 0]">
+        {{ label }}
+      </div>
+    </div>
+
+    <div class="flex flex-row justify-between w-full">
+      <div
+        *ngFor="let usage of usages; trackBy: trackUsageByDay; let index = index"
+        class="text-sm h-[150px] flex flex-col items-center gap-1 relative"
+      >
+        <div
+          class="w-2 rounded-md mt-auto"
+          [ngClass]="totalBarClass()"
+          [style.height.px]="heightFor(usage.amount)"
+          [style.transitionDelay]="(index * 0.05) + 's'"
+        ></div>
+        <div
+          *ngIf="type === 'electricity'"
+          class="absolute w-2 rounded-md mt-auto bottom-5"
+          [ngClass]="cleanBarClass()"
+          [style.height.px]="heightFor(usage.clean)"
+          [style.transitionDelay]="(0.3 + index * 0.05) + 's'"
+        ></div>
+        <div class="text-xs text-zinc-500">{{ usage.day }}</div>
+      </div>
+    </div>
+
+    <div class="flex flex-col gap-1">
+      <div class="flex flex-row gap-2 items-center">
+        <div class="size-3 rounded-sm" [ngClass]="totalLegendBackground()"></div>
+        <div class="text-xs text-zinc-500">Total</div>
+      </div>
+      <div class="flex flex-row gap-2 items-center" *ngIf="type === 'electricity'">
+        <div class="size-3 rounded-sm bg-green-500"></div>
+        <div class="text-xs text-zinc-500">Clean</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="hidden bg-blue-500 bg-blue-100 bg-green-500 bg-green-100 bg-orange-500"></div>
+</div>

@@ -1,0 +1,51 @@
+<div class="flex flex-row gap-2 md:max-w-[452px] max-w-[calc(100dvw-80px)] w-full pb-6">
+  <div
+    class="bg-zinc-100 dark:bg-zinc-800 p-2 rounded-md flex flex-row gap-3 items-center"
+  >
+    <div class="p-2 bg-blue-500 text-blue-50 dark:bg-blue-300 dark:text-blue-800 rounded-md">
+      <app-gauge-icon></app-gauge-icon>
+    </div>
+    <div>
+      <div class="text-xs">Climate</div>
+      <div class="text-xs text-zinc-500 dark:text-zinc-400">
+        {{ hub.climate.low }}-{{ hub.climate.high }}°C
+      </div>
+    </div>
+  </div>
+
+  <div
+    class="bg-zinc-100 dark:bg-zinc-800 p-2 rounded-md flex flex-row gap-3 items-center flex-shrink-0"
+  >
+    <div class="relative p-2 text-zinc-50 size-8 dark:bg-zinc-200 dark:text-amber-900 rounded-md bg-zinc-300">
+      <div class="size-8 absolute inset-0 z-20 flex items-center justify-center">
+        <app-lightning-icon></app-lightning-icon>
+      </div>
+      <div
+        class="absolute bottom-0 left-0 w-8 bg-amber-500"
+        [class.rounded-md]="lightsOn === hub.lights.length"
+        [class.rounded-b-md]="lightsOn !== hub.lights.length"
+        [style.height.px]="lightsHeight"
+      ></div>
+    </div>
+    <div>
+      <div class="text-xs">Lights</div>
+      <div class="text-xs text-zinc-500 dark:text-zinc-400">
+        {{ lightsOn }}/{{ hub.lights.length }} On
+      </div>
+    </div>
+  </div>
+
+  <div
+    class="bg-zinc-100 dark:bg-zinc-800 p-2 rounded-md flex flex-row gap-3 items-center"
+  >
+    <div class="p-2 bg-green-600 text-green-100 dark:bg-green-200 dark:text-green-900 rounded-md">
+      <app-lock-icon></app-lock-icon>
+    </div>
+    <div>
+      <div class="text-xs">Security</div>
+      <div class="text-xs text-zinc-500 dark:text-zinc-400">
+        {{ locksLocked }}/{{ hub.locks.length }} Locked
+      </div>
+    </div>
+  </div>
+</div>
