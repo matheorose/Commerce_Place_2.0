@@ -10,7 +10,7 @@ from fastapi.responses import FileResponse
 
 from ..core.config import settings
 from ..models.api import ChatData, ChatRequest, ChatResponse, ParsedInfo
-from ..services.conversation_agent import CityInsightsAgent
+from ..services.conversation_agent import CityInsightsAgent, ConversationIntent
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +45,8 @@ def chat(request: ChatRequest) -> ChatResponse:
         outcome = city_agent.run(request.message)
     except Exception as exc:  # noqa: BLE001
         logger.exception("Agent error")
-        return ChatResponse(success=False, message=str(exc))
+        fallback = city_agent.build_error_answer(request.message, exc)
+        return ChatResponse(success=True, answer=fallback)
 
     if not outcome.fetch:
         return ChatResponse(success=True, answer=outcome.answer)
@@ -61,10 +62,12 @@ def chat(request: ChatRequest) -> ChatResponse:
         bbox_mode=fetch.bbox_mode,
     )
 
+    places_for_ui = fetch.places if outcome.intent == ConversationIntent.LISTING else []
+
     data = ChatData(
         count=fetch.count,
         bbox=analysis.bbox if analysis else fetch.bbox,
-        places=fetch.places,
+        places=places_for_ui,
         result_file=str(fetch.result_file),
         result_filename=fetch.result_filename,
         view_file=map_path.name if map_path else None,
