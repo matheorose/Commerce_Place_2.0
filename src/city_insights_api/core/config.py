@@ -7,6 +7,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Iterable, List
 
+from dotenv import load_dotenv
+
+load_dotenv()
+
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 REPO_ROOT = PROJECT_ROOT.parent
 LEGACY_DIR = REPO_ROOT / "ia"

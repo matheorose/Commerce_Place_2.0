@@ -36,6 +36,7 @@ interface BackendHistoryMessage {
   role: 'user' | 'assistant';
   content: string;
   created_at?: string;
+  view_file?: string;
 }
 
 interface BackendSessionDetail {

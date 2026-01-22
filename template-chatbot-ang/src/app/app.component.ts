@@ -17,6 +17,7 @@ import { VercelIconComponent } from './components/icons/vercel-icon/vercel-icon.
 import { MasonryIconComponent } from './components/icons/masonry-icon/masonry-icon.component';
 import { BotIconComponent } from './components/icons/bot-icon/bot-icon.component';
 import { ChatSessionSummary } from './models/chat-session';
+import { environment } from '../environments/environment';
 
 interface SuggestedAction {
   title: string;
@@ -125,6 +126,9 @@ export class AppComponent implements AfterViewInit, OnDestroy, OnInit {
         id: index + 1,
         role: message.role,
         text: message.content,
+        viewUrl: message.view_file
+          ? `${environment.apiBaseUrl}/api/views/${message.view_file}`
+          : undefined,
       }));
       this.messages = restoredMessages;
       this.messageCounter = restoredMessages.length;

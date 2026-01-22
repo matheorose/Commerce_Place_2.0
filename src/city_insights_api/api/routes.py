@@ -73,7 +73,16 @@ def chat(request: ChatRequest) -> ChatResponse:
         history_store.record_turn(session_id, request.message, fallback)
         return ChatResponse(success=True, answer=fallback, session_id=session_id)
 
-    history_store.record_turn(session_id, request.message, outcome.answer)
+    assistant_view_file = None
+    if outcome.map_file:
+        assistant_view_file = outcome.map_file.name
+
+    history_store.record_turn(
+        session_id,
+        request.message,
+        outcome.answer,
+        assistant_view_file=assistant_view_file,
+    )
 
     if history_store.needs_title(session_id):
         title = city_agent.build_title(request.message, outcome.answer)

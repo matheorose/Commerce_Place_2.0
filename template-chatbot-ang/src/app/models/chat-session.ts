@@ -10,6 +10,7 @@ export interface ChatHistoryMessage {
   role: MessageRole;
   content: string;
   created_at?: string;
+  view_file?: string;
 }
 
 export interface ChatSessionDetail {

@@ -56,6 +56,7 @@ class ChatHistoryMessage(BaseModel):
     role: Literal["user", "assistant"]
     content: str
     created_at: Optional[datetime] = None
+    view_file: Optional[str] = None
 
 
 class ChatSessionDetail(BaseModel):

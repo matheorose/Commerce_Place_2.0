@@ -73,15 +73,22 @@ class ChatHistoryStore:
         )
 
     # Persistence --------------------------------------------------------
-    def record_turn(self, session_id: str, user_message: str, agent_message: str) -> None:
+    def record_turn(
+        self,
+        session_id: str,
+        user_message: str,
+        agent_message: str,
+        *,
+        assistant_view_file: Optional[str] = None,
+    ) -> None:
         try:
             obj_id = ObjectId(session_id)
         except Exception as exc:  # noqa: BLE001
             raise ValueError("Identifiant de session invalide") from exc
         now = datetime.now(timezone.utc)
         payload = [
-            {"role": "user", "content": user_message, "created_at": now},
-            {"role": "assistant", "content": agent_message, "created_at": now},
+            {"role": "user", "content": user_message, "created_at": now, "view_file": None},
+            {"role": "assistant", "content": agent_message, "created_at": now, "view_file": assistant_view_file},
         ]
         self.collection.update_one(
             {"_id": obj_id},
@@ -161,6 +168,7 @@ class ChatHistoryStore:
                 "role": entry.get("role", "assistant"),
                 "content": entry.get("content") or "",
                 "created_at": entry.get("created_at"),
+                "view_file": entry.get("view_file"),
             }
             for entry in doc.get("messages", [])
         ]
