@@ -4,11 +4,10 @@ from __future__ import annotations
 
 import logging
 import re
-from collections import deque
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Deque, List, Literal, Optional
+from typing import List, Literal, Optional, Sequence, Tuple
 
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
@@ -161,6 +160,23 @@ Règles de réponse :
 )
 
 
+TITLE_PROMPT = ChatPromptTemplate.from_messages(
+    [
+        (
+            "system",
+            "Tu reçois un échange utilisateur/assistant et tu dois proposer un titre très court (5 mots max). "
+            "Le titre doit être descriptif et écrit en français.",
+        ),
+        (
+            "human",
+            "Message utilisateur : {user}\n"
+            "Réponse de l'assistant : {agent}\n"
+            "Titre suggéré :",
+        ),
+    ]
+)
+
+
 class CityInsightsAgent:
     def __init__(
         self,
@@ -173,17 +189,26 @@ class CityInsightsAgent:
         self.llm = ChatOpenAI(model=model, temperature=temperature)
         self.planner = PLANNER_PROMPT | self.llm.with_structured_output(ToolPlan)
         self.responder = RESPONSE_PROMPT | self.llm
-        self.memory: Deque[tuple[str, str]] = deque(maxlen=5)
-        self.user_history: Deque[str] = deque(maxlen=5)
+        self.titler = TITLE_PROMPT | self.llm
 
-    def run(self, message: str) -> AgentOutcome:
-        self._remember_user(message)
+    def run(
+        self,
+        message: str,
+        *,
+        session_id: str,
+        prior_turns: Sequence[Tuple[str, str]],
+        prior_user_messages: Sequence[str],
+    ) -> AgentOutcome:
+        logger.debug("Processing session %s with new message", session_id)
         try:
-            outcome = self._execute_turn(message)
+            outcome = self._execute_turn(
+                message,
+                prior_turns=prior_turns,
+                prior_user_messages=prior_user_messages,
+            )
         except Exception as exc:  # noqa: BLE001
             logger.exception("Agent error while processing message")
             answer = self.build_error_answer(message, exc)
-            self._remember(message, answer)
             return AgentOutcome(
                 answer=answer,
                 fetch=None,
@@ -191,21 +216,29 @@ class CityInsightsAgent:
                 map_file=None,
                 intent=ConversationIntent.GENERAL,
             )
-
-        self._remember(message, outcome.answer)
         return outcome
 
-    def _execute_turn(self, message: str) -> AgentOutcome:
+    def _execute_turn(
+        self,
+        message: str,
+        *,
+        prior_turns: Sequence[Tuple[str, str]],
+        prior_user_messages: Sequence[str],
+    ) -> AgentOutcome:
         fetch_result: AgentPayload | None = None
         analysis_result: PipelineArtifacts | None = None
         map_path: Path | None = None
         fallback_notice: Optional[str] = None
 
-        history_text = self._format_history()
+        history_text = self._format_history(prior_turns)
         intent = self._detect_intent(message)
-        city_hint, category_hint, qualifier_hint = self._infer_parameters()
+        city_hint, category_hint, qualifier_hint = self._infer_parameters(
+            prior_user_messages,
+            latest_message=message,
+        )
         adapter_message = self._build_adapter_message(
             message,
+            prior_user_messages=prior_user_messages,
             city_hint=city_hint,
             category_hint=category_hint,
             qualifier=qualifier_hint,
@@ -214,6 +247,7 @@ class CityInsightsAgent:
         fallback_adapter_message = (
             self._build_adapter_message(
                 message,
+                prior_user_messages=prior_user_messages,
                 city_hint=city_hint,
                 category_hint=category_hint,
                 qualifier=None,
@@ -277,9 +311,6 @@ class CityInsightsAgent:
 
         if fetch_result and fetch_result.places and not wants_analysis:
             map_path = self.pipeline.build_points_map(fetch_result)
-
-        if fallback_notice is None and qualifier_hint:
-            fallback_notice = self._build_specificity_notice(category_hint, qualifier_hint)
 
         context = self._build_context(
             fetch_result,
@@ -353,20 +384,14 @@ class CityInsightsAgent:
             parts.append("Carte simple: " + str(map_file))
         return "\n\n".join(parts)
 
-    def _format_history(self) -> str:
-        if not self.memory:
+    def _format_history(self, prior_turns: Sequence[Tuple[str, str]]) -> str:
+        if not prior_turns:
             return "Aucun échange précédent."
         lines: List[str] = []
-        for idx, (user, agent) in enumerate(reversed(self.memory), start=1):
+        for idx, (user, agent) in enumerate(reversed(prior_turns), start=1):
             lines.append(f"{idx}. Utilisateur : {user}")
             lines.append(f"   Agent : {agent}")
         return "\n".join(lines)
-
-    def _remember(self, user_message: str, agent_answer: str) -> None:
-        self.memory.append((user_message, agent_answer))
-
-    def _remember_user(self, user_message: str) -> None:
-        self.user_history.append(user_message)
 
     def _build_instructions(self, intent: ConversationIntent, *, fallback_notice: Optional[str]) -> str:
         notice = ""
@@ -459,16 +484,15 @@ class CityInsightsAgent:
         self,
         message: str,
         *,
+        prior_user_messages: Sequence[str],
         city_hint: Optional[str],
         category_hint: Optional[str],
         qualifier: Optional[str],
         include_qualifier: bool,
     ) -> str:
         """Construit une requête claire pour l'agent legacy en réutilisant les infos implicites."""
-        historical = list(self.user_history)[:-1]
-        recent_users = [user for user in historical if user.strip()]
+        recent_users = [user.strip() for user in prior_user_messages if user.strip()]
         tail = recent_users[-2:]
-        tail = [text.strip() for text in tail if text.strip()]
         hints: List[str] = []
         if category_hint:
             category_text = category_hint
@@ -486,12 +510,18 @@ class CityInsightsAgent:
             sections.append("Historique pertinent : " + " | ".join(tail))
         return "\n".join(sections)
 
-    def _infer_parameters(self) -> tuple[Optional[str], Optional[str], Optional[str]]:
+    def _infer_parameters(
+        self,
+        prior_user_messages: Sequence[str],
+        *,
+        latest_message: str,
+    ) -> tuple[Optional[str], Optional[str], Optional[str]]:
         """Analyse les derniers messages utilisateur pour déduire ville et catégorie."""
         city: Optional[str] = None
         category: Optional[str] = None
         qualifier: Optional[str] = None
-        for raw_text in reversed(self.user_history):
+        history = list(prior_user_messages) + [latest_message]
+        for raw_text in reversed(history):
             text = raw_text.strip()
             if not text:
                 continue
@@ -547,13 +577,6 @@ class CityInsightsAgent:
                 f"Présente les {category_hint} disponibles."
             )
         return "Impossible de trouver la version spécifique demandée. Présente les résultats les plus proches."
-
-    def _build_specificity_notice(self, category_hint: Optional[str], qualifier: str) -> str:
-        base_category = category_hint or "commerces"
-        return (
-            f"Les données disponibles ne permettent pas de distinguer spécifiquement « {qualifier} ». "
-            f"Présente l'ensemble des {base_category} en précisant que la sélection exacte reste à vérifier."
-        )
 
     def _extract_city_hint(self, text: str) -> Optional[str]:
         match = CITY_REGEX.search(text.lower())
@@ -630,6 +653,16 @@ class CityInsightsAgent:
             "commerces": "commerces",
         }
         return singular_map.get(keyword, keyword)
+
+    def build_title(self, user_message: str, agent_answer: str) -> str:
+        try:
+            response = self.titler.invoke({"user": user_message, "agent": agent_answer})
+            title = getattr(response, "content", "").strip()
+        except Exception:  # noqa: BLE001
+            title = ""
+        if not title:
+            title = user_message.strip().capitalize()[:60] or "Conversation"
+        return title
 
     def build_error_answer(self, user_message: str, error: Exception | None = None) -> str:
         detail = self._friendly_error_reason(error)

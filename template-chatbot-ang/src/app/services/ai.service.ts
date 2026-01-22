@@ -4,12 +4,14 @@ import { firstValueFrom } from 'rxjs';
 
 import { environment } from '../../environments/environment';
 import { PlaceInfo } from '../models/message';
+import { ChatSessionSummary, type ChatSessionDetail } from '../models/chat-session';
 
 export type AiResponse = {
   kind: 'text';
   text: string;
   places?: PlaceInfo[];
   viewUrl?: string;
+  sessionId?: string;
 };
 
 interface BackendData {
@@ -27,14 +29,41 @@ interface BackendResponse {
   message?: string;
   parsed?: Record<string, unknown>;
   data?: BackendData;
+  session_id?: string;
+}
+
+interface BackendHistoryMessage {
+  role: 'user' | 'assistant';
+  content: string;
+  created_at?: string;
+}
+
+interface BackendSessionDetail {
+  id: string;
+  title: string;
+  messages: BackendHistoryMessage[];
 }
 
 @Injectable({ providedIn: 'root' })
 export class AiService {
+  private sessionId?: string;
+
   constructor(private readonly http: HttpClient) {}
 
+  setSession(sessionId: string | undefined) {
+    this.sessionId = sessionId;
+  }
+
+  resetSession() {
+    this.sessionId = undefined;
+  }
+
+  getSessionId() {
+    return this.sessionId;
+  }
+
   async sendMessage(message: string): Promise<AiResponse[]> {
-    const body = { message };
+    const body = { message, session_id: this.sessionId };
     const response = await firstValueFrom(
       this.http.post<BackendResponse>(`${environment.apiBaseUrl}/api/chat`, body),
     );
@@ -50,6 +79,8 @@ export class AiService {
       ];
     }
 
+    this.sessionId = response.session_id ?? this.sessionId;
+
     if (!response.data) {
       return [
         {
@@ -58,6 +89,7 @@ export class AiService {
             response.answer ??
             response.message ??
             'Requête traitée sans données spécifiques.',
+          sessionId: this.sessionId,
         },
       ];
     }
@@ -72,7 +104,23 @@ export class AiService {
         text: response.answer ?? 'Requête traitée avec succès.',
         places: response.data.places,
         viewUrl,
+        sessionId: this.sessionId,
       },
     ];
+  }
+
+  async listSessions(): Promise<ChatSessionSummary[]> {
+    const url = `${environment.apiBaseUrl}/api/chat/sessions`;
+    return firstValueFrom(this.http.get<ChatSessionSummary[]>(url));
+  }
+
+  async fetchSession(sessionId: string): Promise<ChatSessionDetail> {
+    const url = `${environment.apiBaseUrl}/api/chat/sessions/${sessionId}`;
+    const detail = await firstValueFrom(this.http.get<BackendSessionDetail>(url));
+    return {
+      id: detail.id,
+      title: detail.title,
+      messages: detail.messages ?? [],
+    };
   }
 }

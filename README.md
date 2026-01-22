@@ -25,6 +25,7 @@ Service FastAPI propre qui orchestre l'agent IA historique et le pipeline d'anal
   pip install -e .
   ```
 - Clef OpenAI exportée (`OPENAI_API_KEY`) pour que l'agent LangChain puisse fonctionner.
+- Une base MongoDB accessible (par défaut `mongodb://localhost:27017`) pour stocker l'historique des conversations. Vous pouvez ajuster les variables `MONGO_DSN`, `MONGO_DB_NAME` et `MONGO_COLLECTION`.
 - Jeu de données INSEE `carroyage-insee-metro-s2.csv` placé dans `city_insights_api/data/` **ou** conservé dans `../ia/data/` (détecté automatiquement).
 
 ## Lancement de l'API
@@ -36,11 +37,12 @@ python main.py
 uvicorn city_insights_api.app:app --reload --port 8000
 ```
 
-Endpoints disponibles :
-
-- `GET /api/health` – ping simple.
-- `POST /api/chat` – attend `{ "message": "..." }` et renvoie `answer`, `places`, fichiers générés.
-- `GET /api/views/{filename}` – sert les cartes Folium stockées dans `data/views/`.
+- Endpoints disponibles :
+  - `GET /api/health` – ping simple.
+  - `POST /api/chat` – attend `{ "message": "..." , "session_id"?: "<id>" }`, renvoie la réponse IA, les fichiers générés **et** l'identifiant de session pour continuer un fil.
+  - `GET /api/views/{filename}` – sert les cartes Folium stockées dans `data/views/`.
+  - `GET /api/chat/sessions` – liste des conversations (titre choisi par l'IA + date de mise à jour).
+  - `GET /api/chat/sessions/{id}` – messages d'une conversation pour relecture côté front.
 
 Le JSON retourné conserve la mécanique précédente (`success`, `answer`, `parsed`, `data`).
 
@@ -54,7 +56,7 @@ npm install
 npm run start   # lance http://localhost:4200
 ```
 
-Le front enverra les requêtes à `http://localhost:8000/api/chat` (modifiable via `src/environments/environment.ts`). Pensez à lancer le backend avant les tests pour éviter les erreurs réseau. Les cartes Folium sont accessibles depuis le bouton "Ouvrir la carte" qui pointe sur `GET /api/views/<fichier>`.
+Le front enverra les requêtes à `http://localhost:8000/api` (modifiable via `src/environments/environment.ts`). Pensez à lancer le backend avant les tests pour éviter les erreurs réseau. Les cartes Folium sont accessibles depuis le bouton "Ouvrir la carte" qui pointe sur `GET /api/views/<fichier>`. Un panneau latéral gauche affiche désormais l'historique des conversations (titres générés par l'IA) et permet de reprendre n'importe quel fil.
 
 ## Variables d'environnement utiles
 
@@ -63,6 +65,9 @@ Le front enverra les requêtes à `http://localhost:8000/api/chat` (modifiable v
 | `OPENAI_API_KEY` | Clé API OpenAI requise par l'agent LangChain. |
 | `API_ALLOWED_ORIGINS` | Liste d'origines CORS séparées par des virgules (défaut `http://localhost:4200`). |
 | `LEGACY_AGENT_PATH` | Chemin personnalisé vers `Agent-Python-Donnes_de_commerces_a_partir_dune_ville.py` si le dossier `ia/` n'est pas voisin. |
+| `MONGO_DSN` | Connexion MongoDB (défaut `mongodb://localhost:27017`). |
+| `MONGO_DB_NAME` | Nom de la base utilisée pour l'historique (`cityinsights`). |
+| `MONGO_COLLECTION` | Collection MongoDB pour les conversations (`chat_sessions`). |
 
 ## Pipeline réutilisé
 

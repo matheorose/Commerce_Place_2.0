@@ -5,6 +5,7 @@ import {
   Component,
   ElementRef,
   OnDestroy,
+  OnInit,
   ViewChild,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
@@ -15,6 +16,7 @@ import { MessageComponent } from './components/message/message.component';
 import { VercelIconComponent } from './components/icons/vercel-icon/vercel-icon.component';
 import { MasonryIconComponent } from './components/icons/masonry-icon/masonry-icon.component';
 import { BotIconComponent } from './components/icons/bot-icon/bot-icon.component';
+import { ChatSessionSummary } from './models/chat-session';
 
 interface SuggestedAction {
   title: string;
@@ -37,7 +39,7 @@ interface SuggestedAction {
   templateUrl: './app.component.html',
   styleUrls: ['./app.component.css'],
 })
-export class AppComponent implements AfterViewInit, OnDestroy {
+export class AppComponent implements AfterViewInit, OnDestroy, OnInit {
   @ViewChild('messagesContainer') messagesContainer?: ElementRef<HTMLDivElement>;
   @ViewChild('messagesEnd') messagesEnd?: ElementRef<HTMLDivElement>;
 
@@ -45,6 +47,8 @@ export class AppComponent implements AfterViewInit, OnDestroy {
   messages: UiMessage[] = [];
   isProcessing = false;
   reflectionText = '';
+  sessions: ChatSessionSummary[] = [];
+  selectedSessionId?: string;
   private reflectionInterval?: ReturnType<typeof setInterval>;
   suggestedActions: SuggestedAction[] = [
     {
@@ -73,6 +77,10 @@ export class AppComponent implements AfterViewInit, OnDestroy {
   private observer?: MutationObserver;
 
   constructor(private readonly aiService: AiService) {}
+
+  async ngOnInit(): Promise<void> {
+    await this.refreshSessions();
+  }
 
   ngAfterViewInit(): void {
     if (!this.messagesContainer?.nativeElement) {
@@ -106,6 +114,41 @@ export class AppComponent implements AfterViewInit, OnDestroy {
     await this.sendMessage(action);
   }
 
+  async loadSession(sessionId: string) {
+    if (this.selectedSessionId === sessionId && this.messages.length > 0) {
+      return;
+    }
+    try {
+      const detail = await this.aiService.fetchSession(sessionId);
+      const restoredMessages = detail.messages.map((message, index) => ({
+        id: index + 1,
+        role: message.role,
+        text: message.content,
+      }));
+      this.messages = restoredMessages;
+      this.messageCounter = restoredMessages.length;
+      this.selectedSessionId = detail.id;
+      this.aiService.setSession(detail.id);
+      setTimeout(() => this.scrollToBottom(), 0);
+      await this.refreshSessions();
+    } catch (error) {
+      console.error('Impossible de charger la conversation', error);
+    }
+  }
+
+  async startNewChat() {
+    this.messages = [];
+    this.inputValue = '';
+    this.selectedSessionId = undefined;
+    this.messageCounter = 0;
+    this.aiService.resetSession();
+    await this.refreshSessions();
+  }
+
+  isActiveSession(sessionId: string) {
+    return this.selectedSessionId === sessionId;
+  }
+
   private async sendMessage(text: string) {
     if (this.isProcessing) {
       return;
@@ -126,6 +169,8 @@ export class AppComponent implements AfterViewInit, OnDestroy {
       responses.forEach((response) => {
         this.addMessage(this.mapResponse(response));
       });
+      this.selectedSessionId = this.aiService.getSessionId();
+      await this.refreshSessions();
     } catch (error) {
       console.error(error);
       this.addMessage({
@@ -152,6 +197,14 @@ export class AppComponent implements AfterViewInit, OnDestroy {
 
   private addMessage(message: UiMessage) {
     this.messages = [...this.messages, message];
+  }
+
+  private async refreshSessions() {
+    try {
+      this.sessions = await this.aiService.listSessions();
+    } catch (error) {
+      console.error('Impossible de récupérer les conversations', error);
+    }
   }
 
   private nextId() {

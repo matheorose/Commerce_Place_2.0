@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import List, Optional
+from datetime import datetime
+from typing import List, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict
 
@@ -11,6 +12,7 @@ from .domain import AgentPlace, BoundingBox, KMeansMetrics, ZoneInsight
 
 class ChatRequest(BaseModel):
     message: str
+    session_id: Optional[str] = None
 
 
 class ParsedInfo(BaseModel):
@@ -41,3 +43,22 @@ class ChatResponse(BaseModel):
     parsed: Optional[ParsedInfo] = None
     data: Optional[ChatData] = None
     message: Optional[str] = None
+    session_id: Optional[str] = None
+
+
+class ChatSessionSummary(BaseModel):
+    id: str
+    title: str
+    updated_at: Optional[datetime] = None
+
+
+class ChatHistoryMessage(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str
+    created_at: Optional[datetime] = None
+
+
+class ChatSessionDetail(BaseModel):
+    id: str
+    title: str
+    messages: List[ChatHistoryMessage]

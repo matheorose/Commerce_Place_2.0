@@ -36,6 +36,9 @@ class Settings:
     result_dir: Path = field(init=False)
     views_dir: Path = field(init=False)
     insee_csv_path: Path = field(init=False)
+    mongo_dsn: str = field(default_factory=lambda: os.getenv("MONGO_DSN", "mongodb://localhost:27017"))
+    mongo_db_name: str = field(default_factory=lambda: os.getenv("MONGO_DB_NAME", "cityinsights"))
+    mongo_collection: str = field(default_factory=lambda: os.getenv("MONGO_COLLECTION", "chat_sessions"))
 
     def __post_init__(self) -> None:
         origins_env = _split_env_list(os.getenv("API_ALLOWED_ORIGINS"))
