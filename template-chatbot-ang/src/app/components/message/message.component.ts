@@ -18,6 +18,7 @@ export class MessageComponent implements OnChanges {
   @Input() text?: string;
   @Input() places?: PlaceInfo[];
   @Input() viewUrl?: string;
+  @Input() thinkingTimeSeconds?: number;
 
   formattedText?: SafeHtml;
 

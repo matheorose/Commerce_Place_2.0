@@ -12,3 +12,105 @@ form input:disabled {
   font-weight: 600;
   font-size: 0.95rem;
 }
+
+.conversation-wrapper {
+  width: 100%;
+  max-width: 760px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 1.5rem 0.5rem 0.5rem;
+}
+
+.history-panel {
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 280px;
+  display: flex;
+  flex-direction: column;
+  background: rgba(248, 250, 252, 0.96);
+  border-right: 1px solid rgba(15, 23, 42, 0.08);
+  z-index: 20;
+  transition: transform 0.3s ease, opacity 0.3s ease;
+}
+
+.history-panel-hidden {
+  transform: translateX(-320px);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.sidebar-toggle {
+  position: fixed;
+  top: 24px;
+  left: 24px;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  border: none;
+  background: #1f2937;
+  color: #f8fafc;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 30;
+  box-shadow: 0 10px 25px rgba(15, 23, 42, 0.3);
+  --toggle-shift: 0px;
+  transform: translateX(var(--toggle-shift));
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.sidebar-toggle:hover {
+  transform: translateX(var(--toggle-shift)) scale(1.05);
+  box-shadow: 0 14px 30px rgba(15, 23, 42, 0.35);
+}
+
+.sidebar-toggle--shifted {
+  --toggle-shift: 300px;
+}
+
+.sidebar-toggle-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+@media (max-width: 768px) {
+  .history-panel {
+    top: 12px;
+    left: 12px;
+    bottom: auto;
+    width: calc(100% - 24px);
+  }
+
+  .history-panel-hidden {
+    transform: translateY(-100%);
+  }
+
+  .sidebar-toggle {
+    top: 16px;
+    left: 16px;
+  }
+}
+.primary-action {
+  width: 100%;
+  background: #1f2937;
+  color: #f8fafc;
+  border: none;
+  border-radius: 12px;
+  padding: 0.65rem 1rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  box-shadow: 0 10px 25px rgba(15, 23, 42, 0.25);
+}
+
+.primary-action:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 14px 30px rgba(15, 23, 42, 0.3);
+}

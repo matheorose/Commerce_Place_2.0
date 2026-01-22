@@ -13,4 +13,5 @@ export interface UiMessage {
   text: string;
   places?: PlaceInfo[];
   viewUrl?: string;
+  thinkingTimeSeconds?: number;
 }

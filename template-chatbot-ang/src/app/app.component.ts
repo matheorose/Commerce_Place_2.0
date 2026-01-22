@@ -49,6 +49,7 @@ export class AppComponent implements AfterViewInit, OnDestroy, OnInit {
   reflectionText = '';
   sessions: ChatSessionSummary[] = [];
   selectedSessionId?: string;
+  isSidebarOpen = true;
   private reflectionInterval?: ReturnType<typeof setInterval>;
   suggestedActions: SuggestedAction[] = [
     {
@@ -149,6 +150,10 @@ export class AppComponent implements AfterViewInit, OnDestroy, OnInit {
     return this.selectedSessionId === sessionId;
   }
 
+  toggleSidebar() {
+    this.isSidebarOpen = !this.isSidebarOpen;
+  }
+
   private async sendMessage(text: string) {
     if (this.isProcessing) {
       return;
@@ -164,10 +169,12 @@ export class AppComponent implements AfterViewInit, OnDestroy, OnInit {
     });
     this.inputValue = '';
 
+    const startedAt = performance.now();
     try {
       const responses = await this.aiService.sendMessage(trimmed);
+      const elapsedSeconds = (performance.now() - startedAt) / 1000;
       responses.forEach((response) => {
-        this.addMessage(this.mapResponse(response));
+        this.addMessage(this.mapResponse(response, elapsedSeconds));
       });
       this.selectedSessionId = this.aiService.getSessionId();
       await this.refreshSessions();
@@ -185,13 +192,14 @@ export class AppComponent implements AfterViewInit, OnDestroy, OnInit {
     }
   }
 
-  private mapResponse(response: AiResponse): UiMessage {
+  private mapResponse(response: AiResponse, thinkingTimeSeconds?: number): UiMessage {
     return {
       id: this.nextId(),
       role: 'assistant',
       text: response.text,
       places: response.places,
       viewUrl: response.viewUrl,
+      thinkingTimeSeconds,
     };
   }
 
