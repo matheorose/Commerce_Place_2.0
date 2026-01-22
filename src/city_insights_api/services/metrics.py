@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Dict, List, Sequence
+from typing import Dict, List, Sequence, Tuple
 
 import numpy as np
 from sklearn.cluster import KMeans
@@ -16,6 +16,30 @@ class KMeansEvaluator:
         self.default_k_min = default_k_min
         self.default_k_max = default_k_max
 
+    def suggest_k_range(
+        self,
+        cell_count: int,
+        *,
+        k_min: int | None = None,
+        k_max: int | None = None,
+    ) -> Tuple[int, int]:
+        """Return a (min, max) range of clusters adapted to the dataset size."""
+
+        if k_min is None and k_max is None:
+            min_k, max_k = self._adaptive_range(cell_count)
+        else:
+            min_k = k_min if k_min is not None else self.default_k_min
+            max_k = k_max if k_max is not None else self.default_k_max
+
+        max_allowed = max(2, cell_count - 1)
+        min_k = max(2, min(min_k, max_allowed))
+        max_k = max(min_k, min(max_k, max_allowed))
+
+        if max_k <= min_k and max_allowed > min_k:
+            max_k = min(max_allowed, min_k + 1)
+
+        return min_k, max_k
+
     def evaluate(
         self,
         cells: Sequence[Dict[str, float]],
@@ -26,14 +50,10 @@ class KMeansEvaluator:
         if not cells:
             return None
 
-        k_min = k_min or self.default_k_min
-        k_max = k_max or self.default_k_max
-        if k_min < 2:
-            k_min = 2
-        if k_max <= k_min:
-            k_max = k_min + 1
-
         count = len(cells)
+
+        k_min, k_max = self.suggest_k_range(count, k_min=k_min, k_max=k_max)
+
         if count <= k_min:
             return None
 
@@ -72,6 +92,19 @@ class KMeansEvaluator:
             silhouette=silhouettes,
             davies_bouldin=davies_scores,
         )
+
+    def _adaptive_range(self, cell_count: int) -> Tuple[int, int]:
+        if cell_count < 20:
+            return 2, 4
+        if cell_count < 60:
+            return 3, 6
+        if cell_count < 150:
+            return 4, 8
+        if cell_count < 300:
+            return 5, 10
+        if cell_count < 600:
+            return 6, 12
+        return 8, 15
 
 
 __all__ = ["KMeansEvaluator"]

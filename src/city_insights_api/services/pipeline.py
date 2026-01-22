@@ -211,12 +211,16 @@ class PipelineService:
         return zones
 
     def _choose_k(self, metrics, cell_count: int) -> int:
+        min_k, max_k = self.evaluator.suggest_k_range(cell_count)
+
         if metrics and metrics.k_values:
             silhouettes = metrics.silhouette
             best_idx = None
             best_score = -float("inf")
             for idx, score in enumerate(silhouettes):
                 if score is None or (isinstance(score, float) and np.isnan(score)):
+                    continue
+                if metrics.k_values[idx] < min_k:
                     continue
                 if score > best_score:
                     best_score = score
@@ -230,19 +234,18 @@ class PipelineService:
             for idx, score in enumerate(davies):
                 if score is None or (isinstance(score, float) and np.isnan(score)):
                     continue
+                if metrics.k_values[idx] < min_k:
+                    continue
                 if score < best_score:
                     best_score = score
                     best_idx = idx
             if best_idx is not None:
                 return metrics.k_values[best_idx]
 
-        if cell_count <= 5:
-            return 2
-        if cell_count <= 50:
-            return 3
-        if cell_count <= 150:
-            return 4
-        return 5
+        if cell_count <= min_k:
+            return min(cell_count, max(2, min_k))
+
+        return max_k
 
 
 __all__ = ["PipelineService"]

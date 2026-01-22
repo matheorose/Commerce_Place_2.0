@@ -13,7 +13,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
 from pydantic import BaseModel, Field
 
-from ..models.domain import AgentPayload, PipelineArtifacts
+from ..models.domain import AgentPayload, PipelineArtifacts, ZoneInsight
 from .agent_adapter import AgentAdapter
 from .pipeline import PipelineService
 
@@ -350,6 +350,7 @@ class CityInsightsAgent:
         intent: ConversationIntent,
     ) -> str:
         parts: List[str] = []
+        optimal_summary: Optional[str] = None
         if fetch:
             base = (
                 f"Ville: {fetch.city}\nCatégorie: {fetch.category_label or fetch.category_key}\n"
@@ -371,7 +372,7 @@ class CityInsightsAgent:
                         f"commerces existants={z.existing_commerces}, "
                         f"centre lat={z.lat:.4f}, lon={z.lon:.4f}"
                     )
-                    for z in analysis.zones[:5]
+                    for z in analysis.zones
                 ]
                 parts.append(
                     "Carte: " + str(analysis.map_file)
@@ -380,8 +381,11 @@ class CityInsightsAgent:
                 )
             else:
                 parts.append("Carte générée: " + str(analysis.map_file))
+            optimal_summary = self._describe_optimal_zone(analysis.zones)
         elif map_file:
             parts.append("Carte simple: " + str(map_file))
+        if optimal_summary:
+            parts.append(optimal_summary)
         return "\n\n".join(parts)
 
     def _format_history(self, prior_turns: Sequence[Tuple[str, str]]) -> str:
@@ -403,7 +407,8 @@ class CityInsightsAgent:
         if intent == ConversationIntent.ANALYSIS:
             return (
                 "L'utilisateur attend une analyse stratégique (zones, habitants, concurrence). "
-                "Présente les zones numérotées, explique pourquoi elles sont pertinentes, suggère la consultation de la carte et ne répète pas la liste détaillée des commerces."
+                "Présente toutes les zones numérotées sans en omettre, explique pourquoi elles sont pertinentes, suggère la consultation de la carte et ne répète pas la liste détaillée des commerces. "
+                "Si des zones sont fournies, termine par un résumé explicite qui désigne la zone la plus optimale (ex: « Zone 3 est la plus intéressante car... »)."
                 + notice
             )
         if intent == ConversationIntent.LISTING:
@@ -417,6 +422,31 @@ class CityInsightsAgent:
             "Réponds de façon claire en t'appuyant sur le contexte structuré quand il existe et propose, si utile, une clarification simple."
             + notice
         )
+
+    def _describe_optimal_zone(self, zones: Sequence[ZoneInsight]) -> Optional[str]:
+        if not zones:
+            return None
+        zone, score = self._select_optimal_zone(zones)
+        if not zone or score <= 0:
+            return None
+        habitants_par_commerce = max(int(score), 1)
+        return (
+            "Zone optimale estimée: Zone "
+            f"{zone.zone_id} (~{int(zone.population)} habitants, {zone.existing_commerces} commerces, "
+            f"≈{habitants_par_commerce} habitants par commerce potentiel)."
+        )
+
+    def _select_optimal_zone(self, zones: Sequence[ZoneInsight]) -> tuple[Optional[ZoneInsight], float]:
+        best_zone: Optional[ZoneInsight] = None
+        best_score = -float("inf")
+        for zone in zones:
+            population = max(zone.population, 0.0)
+            existing = max(zone.existing_commerces, 0)
+            score = population / (existing + 1)
+            if score > best_score:
+                best_score = score
+                best_zone = zone
+        return best_zone, best_score
 
     def _detect_intent(self, message: str) -> ConversationIntent:
         normalized = message.lower().replace("’", "'")
