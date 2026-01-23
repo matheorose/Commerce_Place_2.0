@@ -9,6 +9,8 @@ from typing import Iterable, List
 
 from dotenv import load_dotenv
 
+from ..services.insee_downloader import download_insee_carroyage
+
 load_dotenv()
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
@@ -67,9 +69,13 @@ class Settings:
                 "Legacy agent introuvable. Définissez LEGACY_AGENT_PATH ou placez le script dans legacy_agent/."
             )
         if not self.insee_csv_path.exists():
-            raise FileNotFoundError(
-                f"CSV INSEE introuvable à {self.insee_csv_path}. Copiez le fichier dans data/."
-            )
+            try:
+                print("CSV INSEE manquant, téléchargement en cours...")
+                download_insee_carroyage(self.insee_csv_path)
+            except Exception as exc:  # pragma: no cover - network failure
+                raise FileNotFoundError(
+                    f"CSV INSEE introuvable à {self.insee_csv_path} et téléchargement impossible ({exc})."
+                ) from exc
 
 
 settings = Settings()

@@ -52,6 +52,7 @@ data/result/
 data/views/
 data/__pycache__/
 data/carroyage-insee-metro-s2.csv
+data/*.part
 
 # Angular frontend dependencies and builds
 template-chatbot-ang/node_modules/
