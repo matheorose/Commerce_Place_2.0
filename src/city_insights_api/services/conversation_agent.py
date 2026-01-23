@@ -181,7 +181,7 @@ class CityInsightsAgent:
     def __init__(
         self,
         *,
-        model: str = "gpt-4o-mini",
+        model: str = "gpt-5.1",
         temperature: float = 0.0,
     ) -> None:
         self.adapter = AgentAdapter()

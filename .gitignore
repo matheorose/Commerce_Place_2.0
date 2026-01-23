@@ -63,3 +63,5 @@ template-chatbot-ang/.env.local
 template-chatbot-ang/.eslintcache
 template-chatbot-ang/npm-debug.log*
 template-chatbot-ang/yarn-error.log*
+
+/data

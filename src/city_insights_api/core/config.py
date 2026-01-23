@@ -12,8 +12,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
-REPO_ROOT = PROJECT_ROOT.parent
-LEGACY_DIR = REPO_ROOT / "ia"
+LEGACY_AGENT_DIR = PROJECT_ROOT / "legacy_agent"
 
 if Path.cwd() != PROJECT_ROOT:
     os.chdir(PROJECT_ROOT)
@@ -34,7 +33,7 @@ class Settings:
     allowed_origins: List[str] = field(default_factory=lambda: ["http://localhost:4200"])
     insee_csv_name: str = "carroyage-insee-metro-s2.csv"
     legacy_agent_path: Path = field(
-        default_factory=lambda: LEGACY_DIR / "Agent-Python-Donnes_de_commerces_a_partir_dune_ville.py"
+        default_factory=lambda: LEGACY_AGENT_DIR / "Agent-Python-Donnes_de_commerces_a_partir_dune_ville.py"
     )
 
     result_dir: Path = field(init=False)
@@ -57,10 +56,6 @@ class Settings:
         self.views_dir = self.data_dir / "views"
         self.insee_csv_path = self.data_dir / self.insee_csv_name
 
-        legacy_csv = LEGACY_DIR / "data" / self.insee_csv_name
-        if not self.insee_csv_path.exists() and legacy_csv.exists():
-            self.insee_csv_path = legacy_csv
-
         for directory in (self.data_dir, self.result_dir, self.views_dir):
             directory.mkdir(parents=True, exist_ok=True)
 
@@ -69,7 +64,7 @@ class Settings:
 
         if not self.legacy_agent_path.exists():
             raise FileNotFoundError(
-                "Legacy agent introuvable. Définissez LEGACY_AGENT_PATH ou conservez le dossier 'ia'."
+                "Legacy agent introuvable. Définissez LEGACY_AGENT_PATH ou placez le script dans legacy_agent/."
             )
         if not self.insee_csv_path.exists():
             raise FileNotFoundError(

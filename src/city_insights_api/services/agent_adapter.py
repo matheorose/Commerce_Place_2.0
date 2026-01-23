@@ -18,7 +18,7 @@ class AgentAdapter:
         self.agent_path = agent_path or settings.legacy_agent_path
         if not self.agent_path.exists():
             raise FileNotFoundError(
-                f"Legacy agent introuvable: {self.agent_path}. Copiez le dossier 'ia' ou définissez LEGACY_AGENT_PATH."
+                f"Legacy agent introuvable: {self.agent_path}. Copiez le script dans legacy_agent/ ou définissez LEGACY_AGENT_PATH."
             )
         self._module = self._load_module()
 
