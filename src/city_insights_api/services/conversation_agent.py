@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field
 from ..models.domain import AgentPayload, PipelineArtifacts, ZoneInsight
 from .agent_adapter import AgentAdapter
 from .pipeline import PipelineService
+from .web_search import WebSearchResult, WebSearchTool
 
 
 logger = logging.getLogger(__name__)
@@ -70,7 +71,7 @@ CATEGORY_KEYWORDS = (
 class ToolAction(BaseModel):
     """Represents a single step selected by the planner LLM."""
 
-    tool: Literal["fetch_commerces", "analyze_city", "respond_direct"]
+    tool: Literal["fetch_commerces", "analyze_city", "web_search", "respond_direct"]
     reason: str
 
 
@@ -89,6 +90,7 @@ class AgentOutcome:
     fetch: Optional[AgentPayload]
     analysis: Optional[PipelineArtifacts]
     map_file: Optional[Path]
+    web_result: Optional[WebSearchResult]
     intent: ConversationIntent
 
 
@@ -105,17 +107,19 @@ PLANNER_PROMPT = ChatPromptTemplate.from_messages(
         (
             "system",
             """
-Tu es un orchestrateur qui décide quand utiliser trois actions :
+Tu es un orchestrateur qui décide quand utiliser ces actions :
 - fetch_commerces : interroger l'agent historique avec la dernière requête utilisateur (ville + type) afin d'obtenir un JSON de commerces.
 - analyze_city : utiliser le fichier JSON le plus récent pour lancer l'analyse INSEE + KMeans et produire des zones recommandées et une carte.
+- web_search : déclencher une recherche web OpenAI lorsque l'utilisateur demande des informations d'actualité ou hors de nos données internes.
 - respond_direct : répondre toi-même quand la demande est purement conversationnelle ou ne nécessite pas de données réelles.
 
 Procédure :
 1. Analyse UNIQUEMENT le dernier message pour déterminer l'intention ; l'historique ne sert que si cohérent avec la demande actuelle.
 2. Liste au maximum deux actions ordonnées. Si une action est inutile, ne l'inclus pas.
 3. N'ajoute analyze_city que si l'utilisateur demande explicitement une recommandation d'implantation, une analyse, une carte ou une comparaison habitants/commerces.
-4. Utilise respond_direct pour les questions générales, les précisions ou lorsqu'aucun outil n'est nécessaire.
-5. Indique en une phrase la raison de chaque action en reprenant les éléments concrets de la demande.
+4. Utilise web_search UNIQUEMENT lorsque la réponse nécessite des faits externes (actualités, données générales hors commerces locaux) ou quand l'utilisateur insiste sur des sources en ligne.
+5. Utilise respond_direct pour les questions générales, les précisions ou lorsqu'aucun outil n'est nécessaire.
+6. Indique en une phrase la raison de chaque action en reprenant les éléments concrets de la demande.
 
 Intention détectée : {intent}
 Historique (du plus récent au plus ancien) :
@@ -147,7 +151,8 @@ Règles de réponse :
 2. Lorsque seule la liste des commerces est demandée, concentre-toi sur les volumes, exemples et éventuelles limites ; n'ajoute pas de recommandation d'implantation.
 3. Lorsque l'analyse est disponible ou demandée, décris les zones en parlant de « Zone 1 », « Zone 2 », etc. Mentionne population, niveau de concurrence et ce que cela implique pour la stratégie.
 4. Invite à consulter la carte lorsqu'elle est disponible et pertinente (ex : « Consulte la carte jointe... »).
-5. Si aucune donnée structurée n'est fournie, apporte une réponse générale en te basant sur ton expertise et propose une question de clarification si nécessaire.
+5. Si des informations issues du web sont fournies, cite-les clairement (ex : « D'après une recherche web récente... ») et mentionne jusqu'à deux sources.
+6. Si aucune donnée structurée n'est fournie, apporte une réponse générale en te basant sur ton expertise et propose une question de clarification si nécessaire.
 """.strip(),
         ),
         ("human", "{message}"),
@@ -183,9 +188,15 @@ class CityInsightsAgent:
         *,
         model: str = "gpt-5.1",
         temperature: float = 0.0,
+        web_model: str = "gpt-4.1-mini",
     ) -> None:
         self.adapter = AgentAdapter()
         self.pipeline = PipelineService()
+        try:
+            self.web_search_tool: WebSearchTool | None = WebSearchTool(model=web_model)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Impossible d'initialiser la recherche web: %s", exc)
+            self.web_search_tool = None
         self.llm = ChatOpenAI(model=model, temperature=temperature)
         self.planner = PLANNER_PROMPT | self.llm.with_structured_output(ToolPlan)
         self.responder = RESPONSE_PROMPT | self.llm
@@ -214,6 +225,7 @@ class CityInsightsAgent:
                 fetch=None,
                 analysis=None,
                 map_file=None,
+                web_result=None,
                 intent=ConversationIntent.GENERAL,
             )
         return outcome
@@ -228,6 +240,7 @@ class CityInsightsAgent:
         fetch_result: AgentPayload | None = None
         analysis_result: PipelineArtifacts | None = None
         map_path: Path | None = None
+        web_result: WebSearchResult | None = None
         fallback_notice: Optional[str] = None
 
         history_text = self._format_history(prior_turns)
@@ -281,6 +294,11 @@ class CityInsightsAgent:
         needs_fetch = any(a.tool in {"fetch_commerces", "analyze_city"} for a in actions)
         wants_analysis = analysis_required or any(a.tool == "analyze_city" for a in actions)
 
+        if self._needs_web_search(message):
+            actions = [
+                ToolAction(tool="web_search", reason="Demande explicite d'information provenant du web.")
+            ]
+
         for action in actions:
             if action.tool == "fetch_commerces" and fetch_result is None:
                 fetch_result, note = self._run_fetch_with_fallback(
@@ -303,6 +321,15 @@ class CityInsightsAgent:
                         fallback_notice = fallback_notice or note
                 analysis_result = self.pipeline.run_from_agent(fetch_result)
                 map_path = analysis_result.map_file
+            elif action.tool == "web_search" and web_result is None:
+                if self.web_search_tool is None:
+                    logger.info("Web search tool indisponible, action ignorée.")
+                    continue
+                query = self._build_search_query(message, city_hint=city_hint, category_hint=category_hint)
+                try:
+                    web_result = self.web_search_tool.search(query)
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning("Recherche web impossible: %s", exc)
             elif action.tool == "respond_direct":
                 continue
 
@@ -316,10 +343,15 @@ class CityInsightsAgent:
             fetch_result,
             analysis_result,
             map_file=map_path,
+            web_result=web_result,
             include_analysis_details=wants_analysis,
             intent=intent,
         )
-        instructions = self._build_instructions(intent, fallback_notice=fallback_notice)
+        instructions = self._build_instructions(
+            intent,
+            fallback_notice=fallback_notice,
+            web_result=web_result,
+        )
         if fallback_notice:
             context += "\n\nNote : " + fallback_notice
         response = self.responder.invoke(
@@ -336,6 +368,7 @@ class CityInsightsAgent:
             fetch=fetch_result,
             analysis=analysis_result,
             map_file=map_path,
+             web_result=web_result,
             intent=intent,
         )
 
@@ -346,6 +379,7 @@ class CityInsightsAgent:
         analysis: PipelineArtifacts | None,
         *,
         map_file: Path | None,
+        web_result: WebSearchResult | None,
         include_analysis_details: bool,
         intent: ConversationIntent,
     ) -> str:
@@ -384,6 +418,8 @@ class CityInsightsAgent:
             optimal_summary = self._describe_optimal_zone(analysis.zones)
         elif map_file:
             parts.append("Carte simple: " + str(map_file))
+        if web_result:
+            parts.append(self._format_web_result(web_result))
         if optimal_summary:
             parts.append(optimal_summary)
         return "\n\n".join(parts)
@@ -397,13 +433,30 @@ class CityInsightsAgent:
             lines.append(f"   Agent : {agent}")
         return "\n".join(lines)
 
-    def _build_instructions(self, intent: ConversationIntent, *, fallback_notice: Optional[str]) -> str:
+    def _format_web_result(self, result: WebSearchResult) -> str:
+        lines = [
+            "Recherche web récente :",
+            result.summary or "(résumé indisponible)",
+        ]
+        if result.sources:
+            lines.append("Sources : " + ", ".join(result.sources[:3]))
+        return "\n".join(lines)
+
+    def _build_instructions(
+        self,
+        intent: ConversationIntent,
+        *,
+        fallback_notice: Optional[str],
+        web_result: Optional[WebSearchResult],
+    ) -> str:
         notice = ""
         if fallback_notice:
             notice = (
                 " Mentionne en introduction que la recherche précise n'a rien donné "
                 "et que tu fournis la catégorie plus générale conformément à la note."
             )
+        if web_result:
+            notice += " Intègre aussi les informations issues de la recherche web et cite les sources disponibles."
         if intent == ConversationIntent.ANALYSIS:
             return (
                 "L'utilisateur attend une analyse stratégique (zones, habitants, concurrence). "
@@ -607,6 +660,42 @@ class CityInsightsAgent:
                 f"Présente les {category_hint} disponibles."
             )
         return "Impossible de trouver la version spécifique demandée. Présente les résultats les plus proches."
+
+    def _needs_web_search(self, message: str) -> bool:
+        normalized = message.lower()
+        keywords = (
+            "recherche sur le web",
+            "cherche sur le web",
+            "sur le web",
+            "sur internet",
+            "actualité",
+            "actualite",
+            "infos en ligne",
+            "information en ligne",
+            "source web",
+            "peux-tu chercher",
+            "google",
+        )
+        return any(keyword in normalized for keyword in keywords)
+
+    def _build_search_query(
+        self,
+        latest_message: str,
+        *,
+        city_hint: Optional[str],
+        category_hint: Optional[str],
+    ) -> str:
+        base = latest_message.strip()
+        extras: List[str] = []
+        if city_hint:
+            extras.append(city_hint)
+        if category_hint:
+            extras.append(category_hint)
+        if extras:
+            if base:
+                return f"{base} ({' - '.join(extras)})"
+            return " ".join(extras)
+        return base or "tendances commerces France"
 
     def _extract_city_hint(self, text: str) -> Optional[str]:
         match = CITY_REGEX.search(text.lower())
